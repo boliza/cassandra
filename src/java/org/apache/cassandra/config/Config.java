@@ -170,6 +170,9 @@ public class Config
 
     public boolean inter_dc_tcp_nodelay = true;
 
+    //max sstable size for compaction in gb
+    public int max_sstable_size_in_gb = 150;
+
     private static boolean loadYaml = true;
     private static boolean outboundBindAny = false;
 

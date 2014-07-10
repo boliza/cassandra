@@ -20,6 +20,8 @@ package org.apache.cassandra.db.compaction;
 import java.util.*;
 
 import com.google.common.util.concurrent.RateLimiter;
+
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -136,7 +138,7 @@ public abstract class AbstractCompactionStrategy
 
         for (SSTableReader candidate : originalCandidates)
         {
-            if (!candidate.isMarkedSuspect())
+            if (!candidate.isMarkedSuspect() && candidate.onDiskLength() <= DatabaseDescriptor.getMaxSStableSizeInGB() * 1024l * 1024l * 1024l)
                 filteredCandidates.add(candidate);
         }
 

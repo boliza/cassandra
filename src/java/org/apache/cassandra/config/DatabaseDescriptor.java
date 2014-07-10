@@ -1267,4 +1267,10 @@ public class DatabaseDescriptor
     {
         return conf.inter_dc_tcp_nodelay;
     }
+
+    //max_sstable_size_in_gb
+    public static int getMaxSStableSizeInGB()
+    {
+        return conf.max_sstable_size_in_gb;
+    }
 }
