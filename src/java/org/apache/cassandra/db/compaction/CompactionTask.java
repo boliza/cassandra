@@ -21,7 +21,11 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
+import com.google.common.base.Predicate;
 import com.google.common.base.Throwables;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,16 +39,42 @@ import org.apache.cassandra.utils.CloseableIterator;
 public class CompactionTask extends AbstractCompactionTask
 {
     protected static final Logger logger = LoggerFactory.getLogger(CompactionTask.class);
+
+    private static final Predicate<SSTableReader> COMPACT_PREDICATE = new Predicate<SSTableReader>() {
+        @Override
+        public boolean apply(SSTableReader sstable) {
+            return !sstable.isOverflowSSTableSize() && !sstable.isExpired();
+        }
+    };
+
+    private static final Predicate<SSTableReader> REMOVE_PREDICATE = new Predicate<SSTableReader>() {
+        @Override
+        public boolean apply(SSTableReader sstable) {
+            return sstable.isExpired();
+        }
+    };
+
+    private static final Predicate<SSTableReader> UNMARKING_PREDICATE = new Predicate<SSTableReader>() {
+        @Override
+        public boolean apply(SSTableReader sstable) {
+            return !sstable.isExpired() && sstable.isOverflowSSTableSize();
+        }
+    };
+
     protected final int gcBefore;
     protected static long totalBytesCompacted = 0;
     private Set<SSTableReader> toCompact;
+    private Set<SSTableReader> toRemove;
+    private Set<SSTableReader> toUnmarking;
     private CompactionExecutorStatsCollector collector;
 
     public CompactionTask(ColumnFamilyStore cfs, Collection<SSTableReader> sstables, final int gcBefore)
     {
         super(cfs, sstables);
         this.gcBefore = gcBefore;
-        toCompact = new HashSet<SSTableReader>(sstables);
+        toCompact = new HashSet<SSTableReader>(Lists.newArrayList(Iterables.filter(sstables,COMPACT_PREDICATE)));
+        toRemove = new HashSet<SSTableReader>(Lists.newArrayList(Iterables.filter(sstables,REMOVE_PREDICATE)));
+        toUnmarking = new HashSet<SSTableReader>(Lists.newArrayList(Iterables.filter(sstables,UNMARKING_PREDICATE)));
     }
 
     public static synchronized long addToTotalBytesCompacted(long bytesCompacted)
@@ -227,7 +257,19 @@ public class CompactionTask extends AbstractCompactionTask
                 collector.finishCompaction(ci);
         }
 
+        if(!toUnmarking.isEmpty())
+        {
+            cfs.getDataTracker().unmarkCompacting(toUnmarking);
+            logger.info("unmarking {}", toUnmarking);
+        }
+
         cfs.replaceCompactedSSTables(toCompact, sstables, compactionType);
+
+        if(!toRemove.isEmpty())
+        {
+            cfs.replaceCompactedSSTables(toRemove, new ArrayList<SSTableReader>(),compactionType);
+            logger.info("Removed sstables {}", toRemove);
+        }
         // TODO: this doesn't belong here, it should be part of the reader to load when the tracker is wired up
         for (SSTableReader sstable : sstables)
         {

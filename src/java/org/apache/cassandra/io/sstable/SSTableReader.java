@@ -24,7 +24,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.*;
 
-import com.google.common.primitives.Longs;
 import com.google.common.util.concurrent.RateLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,6 +67,8 @@ public class SSTableReader extends SSTable
 
     // guesstimated size of INDEX_INTERVAL index entries
     private static final int INDEX_FILE_BUFFER_BYTES = 16 * DatabaseDescriptor.getIndexInterval();
+
+    private static final long EXPIRED_TIME= 60l * 24 * 60 * 60 * 1000;
 
     /**
      * maxDataAge is a timestamp in local server time (e.g. System.currentTimeMilli) which represents an uppper bound
@@ -932,6 +933,15 @@ public class SSTableReader extends SSTable
     public boolean isMarkedSuspect()
     {
         return isSuspect.get();
+    }
+
+    public boolean isExpired()
+    {
+        return System.currentTimeMillis() - maxDataAge >= EXPIRED_TIME;
+    }
+
+    public boolean isOverflowSSTableSize(){
+         return onDiskLength() >= DatabaseDescriptor.getMaxSStableSizeInGB() * 1024l * 1024l * 1024l;
     }
 
     /**

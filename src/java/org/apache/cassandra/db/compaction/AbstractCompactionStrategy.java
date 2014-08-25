@@ -34,14 +34,13 @@ import org.apache.cassandra.io.sstable.SSTableReader;
 
 /**
  * Pluggable compaction strategy determines how SSTables get merged.
- *
+ * <p/>
  * There are two main goals:
- *  - perform background compaction constantly as needed; this typically makes a tradeoff between
- *    i/o done by compaction, and merging done at read time.
- *  - perform a full (maximum possible) compaction if requested by the user
+ * - perform background compaction constantly as needed; this typically makes a tradeoff between
+ * i/o done by compaction, and merging done at read time.
+ * - perform a full (maximum possible) compaction if requested by the user
  */
-public abstract class AbstractCompactionStrategy
-{
+public abstract class AbstractCompactionStrategy {
     private static final Logger logger = LoggerFactory.getLogger(AbstractCompactionStrategy.class);
 
     protected static final float DEFAULT_TOMBSTONE_THRESHOLD = 0.2f;
@@ -56,24 +55,20 @@ public abstract class AbstractCompactionStrategy
     protected float tombstoneThreshold;
     protected long tombstoneCompactionInterval;
 
-    protected AbstractCompactionStrategy(ColumnFamilyStore cfs, Map<String, String> options)
-    {
+    protected AbstractCompactionStrategy(ColumnFamilyStore cfs, Map<String, String> options) {
         assert cfs != null;
         this.cfs = cfs;
         this.options = options;
 
         /* checks must be repeated here, as user supplied strategies might not call validateOptions directly */
 
-        try
-        {
+        try {
             validateOptions(options);
             String optionValue = options.get(TOMBSTONE_THRESHOLD_OPTION);
             tombstoneThreshold = optionValue == null ? DEFAULT_TOMBSTONE_THRESHOLD : Float.parseFloat(optionValue);
             optionValue = options.get(TOMBSTONE_COMPACTION_INTERVAL_OPTION);
             tombstoneCompactionInterval = optionValue == null ? DEFAULT_TOMBSTONE_COMPACTION_INTERVAL : Long.parseLong(optionValue);
-        }
-        catch (ConfigurationException e)
-        {
+        } catch (ConfigurationException e) {
             logger.warn("Error setting compaction strategy options ({}), defaults will be used", e.getMessage());
             tombstoneThreshold = DEFAULT_TOMBSTONE_THRESHOLD;
             tombstoneCompactionInterval = DEFAULT_TOMBSTONE_COMPACTION_INTERVAL;
@@ -84,23 +79,22 @@ public abstract class AbstractCompactionStrategy
      * Releases any resources if this strategy is shutdown (when the CFS is reloaded after a schema change).
      * Default is to do nothing.
      */
-    public void shutdown() { }
+    public void shutdown() {
+    }
 
     /**
      * @param gcBefore throw away tombstones older than this
-     *
      * @return the next background/minor compaction task to run; null if nothing to do.
-     *
+     * <p/>
      * Is responsible for marking its sstables as compaction-pending.
      */
     public abstract AbstractCompactionTask getNextBackgroundTask(final int gcBefore);
 
     /**
      * @param gcBefore throw away tombstones older than this
-     *
      * @return a compaction task that should be run to compact this columnfamilystore
      * as much as possible.  Null if nothing to do.
-     *
+     * <p/>
      * Is responsible for marking its sstables as compaction-pending.
      */
     public abstract AbstractCompactionTask getMaximalTask(final int gcBefore);
@@ -108,10 +102,9 @@ public abstract class AbstractCompactionStrategy
     /**
      * @param sstables SSTables to compact. Must be marked as compacting.
      * @param gcBefore throw away tombstones older than this
-     *
      * @return a compaction task corresponding to the requested sstables.
      * Will not be null. (Will throw if user requests an invalid compaction.)
-     *
+     * <p/>
      * Is responsible for marking its sstables as compaction-pending.
      */
     public abstract AbstractCompactionTask getUserDefinedTask(Collection<SSTableReader> sstables, final int gcBefore);
@@ -132,13 +125,33 @@ public abstract class AbstractCompactionStrategy
      * @param originalCandidates The collection to check for blacklisted SSTables
      * @return list of the SSTables with blacklisted ones filtered out
      */
-    public static List<SSTableReader> filterSuspectSSTables(Collection<SSTableReader> originalCandidates)
-    {
+    public static List<SSTableReader> filterSuspectSSTables(Collection<SSTableReader> originalCandidates) {
         List<SSTableReader> filteredCandidates = new ArrayList<SSTableReader>();
 
         for (SSTableReader candidate : originalCandidates)
         {
-            if (!candidate.isMarkedSuspect() && candidate.onDiskLength() <= DatabaseDescriptor.getMaxSStableSizeInGB() * 1024l * 1024l * 1024l)
+            if (!candidate.isMarkedSuspect())
+            {
+                filteredCandidates.add(candidate);
+            }
+        }
+
+        return filteredCandidates;
+    }
+
+    /**
+     * Filters SSTables that are to removed from the given collection
+     *
+     * @param originalCandidates The collection to check for blacklisted SSTables
+     * @return list of the SSTables with blacklisted ones filtered out
+     */
+    public static List<SSTableReader> filterExpiredSSTables(Collection<SSTableReader> originalCandidates) {
+        List<SSTableReader> filteredCandidates = new ArrayList<SSTableReader>();
+
+        for (SSTableReader candidate : originalCandidates) {
+            if (!candidate.isMarkedSuspect()
+                    && candidate.isOverflowSSTableSize()
+                    && candidate.isExpired())
                 filteredCandidates.add(candidate);
         }
 
@@ -151,8 +164,7 @@ public abstract class AbstractCompactionStrategy
      * allow for a more memory efficient solution if we know the sstable don't overlap (see
      * LeveledCompactionStrategy for instance).
      */
-    public List<ICompactionScanner> getScanners(Collection<SSTableReader> sstables, Range<Token> range)
-    {
+    public List<ICompactionScanner> getScanners(Collection<SSTableReader> sstables, Range<Token> range) {
         RateLimiter limiter = CompactionManager.instance.getRateLimiter();
         ArrayList<ICompactionScanner> scanners = new ArrayList<ICompactionScanner>();
         for (SSTableReader sstable : sstables)
@@ -160,8 +172,7 @@ public abstract class AbstractCompactionStrategy
         return scanners;
     }
 
-    public List<ICompactionScanner> getScanners(Collection<SSTableReader> toCompact)
-    {
+    public List<ICompactionScanner> getScanners(Collection<SSTableReader> toCompact) {
         return getScanners(toCompact, null);
     }
 
@@ -169,33 +180,28 @@ public abstract class AbstractCompactionStrategy
      * Check if given sstable is worth dropping tombstones at gcBefore.
      * Check is skipped if tombstone_compaction_interval time does not elapse since sstable creation and returns false.
      *
-     * @param sstable SSTable to check
+     * @param sstable  SSTable to check
      * @param gcBefore time to drop tombstones
      * @return true if given sstable's tombstones are expected to be removed
      */
-    protected boolean worthDroppingTombstones(SSTableReader sstable, int gcBefore)
-    {
+    protected boolean worthDroppingTombstones(SSTableReader sstable, int gcBefore) {
         // since we use estimations to calculate, there is a chance that compaction will not drop tombstones actually.
         // if that happens we will end up in infinite compaction loop, so first we check enough if enough time has
         // elapsed since SSTable created.
         if (System.currentTimeMillis() < sstable.getCreationTimeFor(Component.DATA) + tombstoneCompactionInterval * 1000)
-           return false;
+            return false;
 
         double droppableRatio = sstable.getEstimatedDroppableTombstoneRatio(gcBefore);
         if (droppableRatio <= tombstoneThreshold)
             return false;
 
         Set<SSTableReader> overlaps = cfs.getOverlappingSSTables(Collections.singleton(sstable));
-        if (overlaps.isEmpty())
-        {
+        if (overlaps.isEmpty()) {
             // there is no overlap, tombstones are safely droppable
             return true;
-        }
-        else
-        {
+        } else {
             // what percentage of columns do we expect to compact outside of overlap?
-            if (sstable.getKeySamples().length < 2)
-            {
+            if (sstable.getKeySamples().length < 2) {
                 // we have too few samples to estimate correct percentage
                 return false;
             }
@@ -214,38 +220,27 @@ public abstract class AbstractCompactionStrategy
         }
     }
 
-    public static Map<String, String> validateOptions(Map<String, String> options) throws ConfigurationException
-    {
+    public static Map<String, String> validateOptions(Map<String, String> options) throws ConfigurationException {
         String threshold = options.get(TOMBSTONE_THRESHOLD_OPTION);
-        if (threshold != null)
-        {
-            try
-            {
+        if (threshold != null) {
+            try {
                 float thresholdValue = Float.parseFloat(threshold);
-                if (thresholdValue < 0)
-                {
+                if (thresholdValue < 0) {
                     throw new ConfigurationException(String.format("%s must be greater than 0, but was %f", TOMBSTONE_THRESHOLD_OPTION, thresholdValue));
                 }
-            }
-            catch (NumberFormatException e)
-            {
+            } catch (NumberFormatException e) {
                 throw new ConfigurationException(String.format("%s is not a parsable int (base10) for %s", threshold, TOMBSTONE_THRESHOLD_OPTION), e);
             }
         }
 
         String interval = options.get(TOMBSTONE_COMPACTION_INTERVAL_OPTION);
-        if (interval != null)
-        {
-            try
-            {
+        if (interval != null) {
+            try {
                 long tombstoneCompactionInterval = Long.parseLong(interval);
-                if (tombstoneCompactionInterval < 0)
-                {
+                if (tombstoneCompactionInterval < 0) {
                     throw new ConfigurationException(String.format("%s must be greater than 0, but was %d", TOMBSTONE_COMPACTION_INTERVAL_OPTION, tombstoneCompactionInterval));
                 }
-            }
-            catch (NumberFormatException e)
-            {
+            } catch (NumberFormatException e) {
                 throw new ConfigurationException(String.format("%s is not a parsable int (base10) for %s", interval, TOMBSTONE_COMPACTION_INTERVAL_OPTION), e);
             }
         }
