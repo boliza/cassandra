@@ -117,6 +117,14 @@ public class CompactionTask extends AbstractCompactionTask
      */
     protected void runWith(File sstableDirectory) throws Exception
     {
+        //remove the older files to release the disk space
+        if(!toRemove.isEmpty())
+        {
+            cfs.markCompacted(toRemove,compactionType);
+            cfs.replaceCompactedSSTables(toRemove, new ArrayList<SSTableReader>(),compactionType);
+            logger.info("Removed sstables {}", toRemove);
+        }
+
         // The collection of sstables passed may be empty (but not null); even if
         // it is not empty, it may compact down to nothing if all rows are deleted.
         assert sstables != null && sstableDirectory != null;
@@ -265,11 +273,6 @@ public class CompactionTask extends AbstractCompactionTask
 
         cfs.replaceCompactedSSTables(toCompact, sstables, compactionType);
 
-        if(!toRemove.isEmpty())
-        {
-            cfs.replaceCompactedSSTables(toRemove, new ArrayList<SSTableReader>(),compactionType);
-            logger.info("Removed sstables {}", toRemove);
-        }
         // TODO: this doesn't belong here, it should be part of the reader to load when the tracker is wired up
         for (SSTableReader sstable : sstables)
         {
