@@ -149,9 +149,7 @@ public abstract class AbstractCompactionStrategy {
         List<SSTableReader> filteredCandidates = new ArrayList<SSTableReader>();
 
         for (SSTableReader candidate : originalCandidates) {
-            if (!candidate.isMarkedSuspect()
-                    && candidate.isOverflowSSTableSize()
-                    && candidate.isExpired())
+            if (candidate.isExpired())
                 filteredCandidates.add(candidate);
         }
 

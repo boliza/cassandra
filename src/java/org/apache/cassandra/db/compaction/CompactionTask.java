@@ -118,11 +118,31 @@ public class CompactionTask extends AbstractCompactionTask
     protected void runWith(File sstableDirectory) throws Exception
     {
         //remove the older files to release the disk space
+        if(toRemove.isEmpty())
+        {
+            Set<SSTableReader> temp = new HashSet<SSTableReader>(AbstractCompactionStrategy.filterExpiredSSTables(cfs.getUncompactingSSTables()));
+            if(!temp.isEmpty())
+            {
+                if(cfs.getDataTracker().markCompacting(temp)){
+                    toRemove = temp;
+                }
+            }
+        }
+
         if(!toRemove.isEmpty())
         {
-            cfs.markCompacted(toRemove,compactionType);
-            cfs.replaceCompactedSSTables(toRemove, new ArrayList<SSTableReader>(),compactionType);
+            cfs.removeExpiredSSTables(toRemove);
             logger.info("Removed sstables {}", toRemove);
+        }
+
+        if(!toUnmarking.isEmpty())
+        {
+            cfs.getDataTracker().unmarkCompacting(toUnmarking);
+        }
+
+        if(toCompact.isEmpty())
+        {
+            return;
         }
 
         // The collection of sstables passed may be empty (but not null); even if
@@ -263,12 +283,6 @@ public class CompactionTask extends AbstractCompactionTask
 
             if (collector != null)
                 collector.finishCompaction(ci);
-        }
-
-        if(!toUnmarking.isEmpty())
-        {
-            cfs.getDataTracker().unmarkCompacting(toUnmarking);
-            logger.info("unmarking {}", toUnmarking);
         }
 
         cfs.replaceCompactedSSTables(toCompact, sstables, compactionType);

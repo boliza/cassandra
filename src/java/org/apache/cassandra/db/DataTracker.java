@@ -340,7 +340,7 @@ public class DataTracker
         }
     }
 
-    private void removeOldSSTablesSize(Iterable<SSTableReader> oldSSTables)
+    public void removeOldSSTablesSize(Iterable<SSTableReader> oldSSTables)
     {
         for (SSTableReader sstable : oldSSTables)
         {

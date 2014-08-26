@@ -990,6 +990,10 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         data.replaceCompactedSSTables(sstables, replacements, compactionType);
     }
 
+    public void removeExpiredSSTables(Collection<SSTableReader> sstables){
+        data.removeOldSSTablesSize(sstables);
+    }
+
     void replaceFlushed(Memtable memtable, SSTableReader sstable)
     {
         data.replaceFlushed(memtable, sstable);

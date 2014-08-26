@@ -937,7 +937,13 @@ public class SSTableReader extends SSTable
 
     public boolean isExpired()
     {
-        return System.currentTimeMillis() - maxDataAge >= EXPIRED_TIME;
+        File file;
+        try {
+            file = new File(dfile.path);
+        } catch (Exception e) {
+            return false;
+        }
+        return System.currentTimeMillis() - file.lastModified() >= EXPIRED_TIME;
     }
 
     public boolean isOverflowSSTableSize(){
